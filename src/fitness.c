@@ -4,11 +4,15 @@
 // fitness tracking program. read the schema to see the things we care about
 //
 // TODO (Brian)
-// 1. fix exercise form (style)
-// 3. make exercise list
-// 4. make exercise list sortable
-// 5. make exercise list exportable
-// 8. unencode the percent encoded things
+// 1. form (style)
+// 2. make list function + list endpoints
+// 3. unencode the percent encoded things
+//
+// We have to do something about parsing numbers and whatever else. We sure are just accepting
+// whateve the user passes to us right into functions like 'atoi', and that probably isn't very
+// good.
+//
+// QUESTIONABLE
 // - generic function that inserts to a table given a form / table name
 
 #define COMMON_IMPLEMENTATION
@@ -68,6 +72,9 @@ int send_file(struct http_request_s *req, struct http_response_s *res, char *pat
 
 // send_error: sends an error
 int send_error(struct http_request_s *req, struct http_response_s *res, int errcode);
+
+// get_list: returns the list page for a given table
+int get_list(struct http_request_s *req, struct http_response_s *res, char *table);
 
 // SERVER FUNCTIONS
 // exercise_post: handles the POSTing of an exercise record
@@ -136,6 +143,13 @@ int rcheck(struct http_request_s *req, char *target, char *method)
 	if (t.len == 1 && t.buf[0] == '/' && strlen(target) > 1)
 		return 0;
 
+	// determine if we have query parameters, and what the "real length" of t is
+	for (i = 0; i < t.len && t.buf[i] != '?'; i++)
+		;
+
+	if (strlen(target) != i)
+		return 0;
+
 	// stop checking the target before query parameters
 	for (i = 0; i < t.len && i < strlen(target) && target[i] != '?'; i++) {
 		if (tolower(t.buf[i]) != tolower(target[i]))
@@ -185,6 +199,9 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/meal", "POST")) {
 		rc = meal_post(req, res);
 		CHKERR(503);
+	} else if (rcheck(req, "/meal/list", "GET")) {
+		rc = get_list(req, res, "v_tbl_meal");
+		CHKERR(503);
 
 	// weight endpoints
 	} else if (rcheck(req, "/weight", "GET")) {
@@ -198,6 +215,123 @@ void request_handler(struct http_request_s *req)
 	} else {
 		send_error(req, res, 404);
 	}
+}
+
+// get_list: returns the list page for a given table
+int get_list(struct http_request_s *req, struct http_response_s *res, char *table)
+{
+	sqlite3_stmt *stmt;
+	size_t page_siz, page_cnt;
+	char *sort_col, *sort_ord;
+	struct http_string_s z;
+	struct kvpairs q;
+	char *t;
+	int rc, i, j;
+	FILE *stream;
+	char *stream_ptr;
+	size_t stream_siz;
+	char sql[BUFLARGE];
+
+	// NOTE (Brian) we respond to the following query parameters
+	// - page_siz the size of each page
+	// - page_cnt the page number we're on
+	// - sort_col the column to sort on
+	// - sort_ord asc or desc
+
+	z = http_request_target(req);
+	q = parse_url_encoded(z);
+
+	t = getv(q, "page_siz");
+	page_siz = t == NULL ? 20 : atoi(t);
+
+	t = getv(q, "page_cnt");
+	page_cnt = t == NULL ? 0 : atoi(t);
+
+	t = getv(q, "sort_col"); // this only works because every table has a ts column
+	sort_col = t == NULL ? "ts" : t;
+
+	t = getv(q, "sort_ord"); // coalesce this to asc if null, or not allowed
+	sort_ord = t == NULL ? "asc" : (streq(t, "asc") || streq(t, "desc") ? t : "asc");
+
+#define THE_SQL	("select * from %s order by %s %s limit %ld offset %ld;")
+	// TODO (Brian) we need to evaluate this bit for SQL injection
+	memset(sql, 0, sizeof sql);
+
+	snprintf(sql, sizeof sql, THE_SQL, table,
+		sort_col, sort_ord, page_siz, page_cnt * page_siz);
+
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		free_kvpairs(q);
+		return -1;
+	}
+#undef THE_SQL
+
+	// now, we have to print out some table information
+	stream = open_memstream(&stream_ptr, &stream_siz);
+
+#define SOUT(s,...) (fprintf(stream,s"\n",##__VA_ARGS__))
+
+	{
+		t = sys_readfile("html/prologue.html", NULL);
+		SOUT("%s", t);
+		free(t);
+	}
+
+	SOUT("<div align=\"center\">");
+	SOUT("<table>");
+
+	for (i = 0; (rc = sqlite3_step(stmt)) == SQLITE_ROW; i++) {
+		if (i == 0) {
+			SOUT("\t<tr>");
+			for (j = 0; j < sqlite3_column_count(stmt); j++) {
+				SOUT("\t\t<th>%s</th>", sqlite3_column_name(stmt, j));
+			}
+			SOUT("\t</tr>");
+		}
+
+		SOUT("\t<tr>");
+		for (j = 0; j < sqlite3_column_count(stmt); j++) {
+			t = (char *)sqlite3_column_text(stmt, j);
+			SOUT("\t\t<td>%s</td>", t);
+		}
+		SOUT("\t</tr>");
+	}
+
+	SOUT("</table>");
+	SOUT("</div>");
+
+	{
+		t = sys_readfile("html/epilogue.html", NULL);
+		SOUT("%s", t);
+		free(t);
+	}
+
+	fclose(stream);
+
+#undef SOUT
+
+	if (rc != SQLITE_DONE) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		free_kvpairs(q);
+		return -1;
+	}
+
+	sqlite3_finalize(stmt);
+
+	http_response_status(res, 200);
+	http_response_header(res, "Content-Type", "text/html");
+	http_response_body(res, stream_ptr, stream_siz);
+
+	http_respond(req, res);
+
+	free(stream_ptr);
+	free_kvpairs(q);
+
+	return 0;
 }
 
 // exercise_post: handles the POSTing of an exercise record
@@ -522,6 +656,8 @@ struct kvpairs parse_url_encoded(struct http_string_s parseme)
 	ss = strchr(content, '?');
 	if (ss == NULL) {
 		ss = content;
+	} else {
+		ss++;
 	}
 
 	for (i = 0, s = strtok(ss, "=&"); s; i++, s = strtok(NULL, "=&")) {

@@ -12,6 +12,8 @@ create table if not exists user
     , is_verified   int default (0)
 );
 
+create unique index if not exists idx_user_id on user (id);
+
 create table if not exists exercise
 (
       id        text default (uuid())
@@ -24,6 +26,14 @@ create table if not exists exercise
 create unique index if not exists idx_exercise_id on exercise (id);
 create unique index if not exists idx_exercise_ts on exercise (ts);
 
+create view if not exists v_tbl_exercise
+as
+select
+      ts
+    , kind
+    , duration
+from exercise;
+
 create table if not exists sleep
 (
       id        text default (uuid())
@@ -31,6 +41,13 @@ create table if not exists sleep
 
     , hours     real not null
 );
+
+create view if not exists v_tbl_sleep
+as
+select
+      ts
+    , hours
+from sleep;
 
 create unique index if not exists idx_sleep_id on sleep (id);
 create unique index if not exists idx_sleep_ts on sleep (ts);
@@ -47,6 +64,14 @@ create table if not exists bloodpressure
 create unique index if not exists idx_bloodpressure_id on bloodpressure (id);
 create unique index if not exists idx_bloodpressure_ts on bloodpressure (ts);
 
+create view if not exists v_tbl_bloodpressure
+as
+select
+      ts
+    , systolic
+    , diastolic
+from bloodpressure;
+
 create table if not exists meal
 (
       id        text default (uuid())
@@ -59,6 +84,14 @@ create table if not exists meal
 create unique index if not exists idx_meal_id on meal (id);
 create unique index if not exists idx_meal_ts on meal (ts);
 
+create view if not exists v_tbl_meal
+as
+select
+      ts
+    , food
+    , est_calories
+from meal;
+
 create table if not exists weight
 (
       id        text default (uuid())
@@ -69,4 +102,11 @@ create table if not exists weight
 
 create unique index if not exists idx_weight_id on weight (id);
 create unique index if not exists idx_weight_ts on weight (ts);
+
+create view if not exists v_tbl_weight
+as
+select
+      ts
+    , value
+from weight;
 
