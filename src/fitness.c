@@ -176,6 +176,9 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/exercise", "POST")) {
 		rc = exercise_post(req, res);
 		CHKERR(503);
+	} else if (rcheck(req, "/exercise/list", "GET")) {
+		rc = get_list(req, res, "v_tbl_exercise");
+		CHKERR(503);
 
 	// sleep endpoints
 	} else if (rcheck(req, "/sleep", "GET")) {
@@ -184,12 +187,18 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/sleep", "POST")) {
 		rc = sleep_post(req, res);
 		CHKERR(503);
+	} else if (rcheck(req, "/sleep/list", "GET")) {
+		rc = get_list(req, res, "v_tbl_sleep");
+		CHKERR(503);
 
 	} else if (rcheck(req, "/bloodpressure", "GET")) {
 		rc = send_file(req, res, "html/bloodpressure.html");
 		CHKERR(503);
 	} else if (rcheck(req, "/bloodpressure", "POST")) {
 		rc = bloodpressure_post(req, res);
+		CHKERR(503);
+	} else if (rcheck(req, "/bloodpressure/list", "GET")) {
+		rc = get_list(req, res, "v_tbl_bloodpressure");
 		CHKERR(503);
 
 	// meal endpoints
@@ -209,6 +218,9 @@ void request_handler(struct http_request_s *req)
 		CHKERR(503);
 	} else if (rcheck(req, "/weight", "POST")) {
 		rc = weight_post(req, res);
+		CHKERR(503);
+	} else if (rcheck(req, "/weight/list", "GET")) {
+		rc = get_list(req, res, "v_tbl_weight");
 		CHKERR(503);
 
 	// error handling and default-ish things
