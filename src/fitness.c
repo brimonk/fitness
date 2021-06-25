@@ -224,6 +224,8 @@ void request_handler(struct http_request_s *req)
 		CHKERR(503);
 
 	// error handling and default-ish things
+	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
+		rc = send_file(req, res, "html/index.html");
 	} else {
 		send_error(req, res, 404);
 	}
