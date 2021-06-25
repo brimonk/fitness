@@ -1,17 +1,15 @@
 // Brian Chrzanowski
 // 2021-06-08 20:04:01
 //
-// my pastebin, with a small, static, instructional webpage
+// fitness tracking program. read the schema to see the things we care about
 //
 // TODO (Brian)
 // 1. fix exercise form (style)
-// 2. handle exercise form submit
 // 3. make exercise list
 // 4. make exercise list sortable
 // 5. make exercise list exportable
-// 6. make a function to read form body data
-// 7. make a function to fetch query parameters
 // 8. unencode the percent encoded things
+// - generic function that inserts to a table given a form / table name
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
@@ -74,6 +72,18 @@ int send_error(struct http_request_s *req, struct http_response_s *res, int errc
 // SERVER FUNCTIONS
 // exercise_post: handles the POSTing of an exercise record
 int exercise_post(struct http_request_s *req, struct http_response_s *res);
+
+// sleep_post: handles posting the sleep form
+int sleep_post(struct http_request_s *req, struct http_response_s *res);
+
+// bloodpressure_post: handles posting the bloodpressure form
+int bloodpressure_post(struct http_request_s *req, struct http_response_s *res);
+
+// meal_post: handles posting the meal form
+int meal_post(struct http_request_s *req, struct http_response_s *res);
+
+// weight_post: handles posting the weight form
+int weight_post(struct http_request_s *req, struct http_response_s *res);
 
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
@@ -145,12 +155,46 @@ void request_handler(struct http_request_s *req)
 
 	res = http_response_init();
 
-	if (rcheck(req, "/exercise/form", "GET")) { // send exercise form
+	// exercise endpoints
+	if (rcheck(req, "/exercise", "GET")) { // send exercise form
 		rc = send_file(req, res, "html/exercise.html");
 		CHKERR(503);
 	} else if (rcheck(req, "/exercise", "POST")) {
 		rc = exercise_post(req, res);
 		CHKERR(503);
+
+	// sleep endpoints
+	} else if (rcheck(req, "/sleep", "GET")) {
+		rc = send_file(req, res, "html/sleep.html");
+		CHKERR(503);
+	} else if (rcheck(req, "/sleep", "POST")) {
+		rc = sleep_post(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/bloodpressure", "GET")) {
+		rc = send_file(req, res, "html/bloodpressure.html");
+		CHKERR(503);
+	} else if (rcheck(req, "/bloodpressure", "POST")) {
+		rc = bloodpressure_post(req, res);
+		CHKERR(503);
+
+	// meal endpoints
+	} else if (rcheck(req, "/meal", "GET")) {
+		rc = send_file(req, res, "html/meal.html");
+		CHKERR(503);
+	} else if (rcheck(req, "/meal", "POST")) {
+		rc = meal_post(req, res);
+		CHKERR(503);
+
+	// weight endpoints
+	} else if (rcheck(req, "/weight", "GET")) {
+		rc = send_file(req, res, "html/weight.html");
+		CHKERR(503);
+	} else if (rcheck(req, "/weight", "POST")) {
+		rc = weight_post(req, res);
+		CHKERR(503);
+
+	// error handling and default-ish things
 	} else {
 		send_error(req, res, 404);
 	}
@@ -177,14 +221,16 @@ int exercise_post(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-#define EXERCISE_POST_SQL ("insert into exercise (kind, duration) values (?,?);")
+#define THE_SQL ("insert into exercise (kind, duration) values (?,?);")
 
-	rc = sqlite3_prepare_v2(db, EXERCISE_POST_SQL, -1, &stmt, NULL);
+	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
 		SQLITE_ERRMSG(rc);
 		sqlite3_finalize(stmt);
 		return -1;
 	}
+
+#undef THE_SQL
 
 	sqlite3_bind_text(stmt, 1, getv(data, "kind"), -1, NULL);
 	sqlite3_bind_int(stmt, 2, atoi(getv(data, "duration")));
@@ -196,7 +242,186 @@ int exercise_post(struct http_request_s *req, struct http_response_s *res)
 	free_kvpairs(data);
 
 	// send a simple success page
-	send_file(req, res, "html/exercise_success.html");
+	send_file(req, res, "html/success.html");
+
+	return 0;
+}
+
+// sleep_post: handles posting the sleep form
+int sleep_post(struct http_request_s *req, struct http_response_s *res)
+{
+	sqlite3_stmt *stmt;
+	struct kvpairs data;
+	struct http_string_s body;
+	int rc;
+
+	body = http_request_body(req);
+
+	data = parse_url_encoded(body);
+
+	// let's check that we have all of the data first
+	if (getv(data, "hours") == NULL) {
+		return -1;
+	}
+
+#define THE_SQL ("insert into sleep (hours) values (?);")
+
+	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+#undef THE_SQL
+
+	sqlite3_bind_double(stmt, 1, atof(getv(data, "hours")));
+
+	sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+
+	free_kvpairs(data);
+
+	// send a simple success page
+	send_file(req, res, "html/success.html");
+
+	return 0;
+}
+
+// bloodpressure_post: handles posting the bloodpressure form
+int bloodpressure_post(struct http_request_s *req, struct http_response_s *res)
+{
+	sqlite3_stmt *stmt;
+	struct kvpairs data;
+	struct http_string_s body;
+	int rc;
+
+	body = http_request_body(req);
+
+	data = parse_url_encoded(body);
+
+	// let's check that we have all of the data first
+	if (getv(data, "systolic") == NULL) {
+		return -1;
+	}
+
+	if (getv(data, "diastolic") == NULL) {
+		return -1;
+	}
+
+#define THE_SQL ("insert into bloodpressure (systolic, diastolic) values (?,?);")
+
+	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+#undef THE_SQL
+
+	sqlite3_bind_double(stmt, 1, atof(getv(data, "systolic")));
+	sqlite3_bind_double(stmt, 2, atof(getv(data, "diastolic")));
+
+	sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+
+	free_kvpairs(data);
+
+	// send a simple success page
+	send_file(req, res, "html/success.html");
+
+	return 0;
+}
+
+// meal_post: handles posting the meal form
+int meal_post(struct http_request_s *req, struct http_response_s *res)
+{
+	sqlite3_stmt *stmt;
+	struct kvpairs data;
+	struct http_string_s body;
+	int rc;
+
+	body = http_request_body(req);
+
+	data = parse_url_encoded(body);
+
+	// let's check that we have all of the data first
+	if (getv(data, "food") == NULL) {
+		return -1;
+	}
+
+	if (getv(data, "est_calories") == NULL) {
+		return -1;
+	}
+
+#define THE_SQL ("insert into meal (food, est_calories) values (?,?);")
+
+	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+#undef THE_SQL
+
+	sqlite3_bind_text(stmt, 1, getv(data, "food"), -1, NULL);
+
+	sqlite3_bind_int(stmt, 2, atoi(getv(data, "est_calories")));
+
+	sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+
+	free_kvpairs(data);
+
+	// send a simple success page
+	send_file(req, res, "html/success.html");
+
+	return 0;
+}
+
+// weight_post: handles posting the meal form
+int weight_post(struct http_request_s *req, struct http_response_s *res)
+{
+	sqlite3_stmt *stmt;
+	struct kvpairs data;
+	struct http_string_s body;
+	int rc;
+
+	body = http_request_body(req);
+
+	data = parse_url_encoded(body);
+
+	// let's check that we have all of the data first
+	if (getv(data, "value") == NULL) {
+		return -1;
+	}
+
+#define THE_SQL ("insert into weight (value) values (?);")
+
+	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+#undef THE_SQL
+
+	sqlite3_bind_double(stmt, 1, atof(getv(data, "value")));
+
+	sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+
+	free_kvpairs(data);
+
+	// send a simple success page
+	send_file(req, res, "html/success.html");
 
 	return 0;
 }
@@ -301,7 +526,6 @@ struct kvpairs parse_url_encoded(struct http_string_s parseme)
 
 	for (i = 0, s = strtok(ss, "=&"); s; i++, s = strtok(NULL, "=&")) {
 		C_RESIZE(&pairs.kvpair);
-		printf("%s - %s\n", i % 2 ? "v" : "k", s);
 
 		if (i % 2 == 0) {
 			pairs.kvpair[pairs.kvpair_len].k = strdup(s);
@@ -312,12 +536,6 @@ struct kvpairs parse_url_encoded(struct http_string_s parseme)
 	}
 
 	free(content);
-
-	// debugging
-	for (i = 0; i < pairs.kvpair_len; i++) {
-		printf("dbg k %s\n", pairs.kvpair[i].k);
-		printf("dbg v %s\n", pairs.kvpair[i].v);
-	}
 
 	return pairs;
 }

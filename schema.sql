@@ -70,17 +70,3 @@ create table if not exists weight
 create unique index if not exists idx_weight_id on weight (id);
 create unique index if not exists idx_weight_ts on weight (ts);
 
-create table if not exists pain
-(
-      id        text default (uuid())
-    , ts        text default (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-
-    , location  text not null
-    , intensity text not null
-    , duration  text not null
-    , description text null
-);
-
-create unique index if not exists idx_pain_id on pain (id);
-create unique index if not exists idx_pain_ts on pain (ts);
-
