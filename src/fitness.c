@@ -224,8 +224,10 @@ void request_handler(struct http_request_s *req)
 		CHKERR(503);
 
 	// error handling and default-ish things
+	} else if (rcheck(req, "/style.css", "GET")) {
+		send_file(req, res, "html/style.css");
 	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
-		rc = send_file(req, res, "html/index.html");
+		send_file(req, res, "html/index.html");
 	} else {
 		send_error(req, res, 404);
 	}
@@ -299,19 +301,23 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 
 	for (i = 0; (rc = sqlite3_step(stmt)) == SQLITE_ROW; i++) {
 		if (i == 0) {
+			SOUT("\t<thead>");
 			SOUT("\t<tr>");
 			for (j = 0; j < sqlite3_column_count(stmt); j++) {
 				SOUT("\t\t<th>%s</th>", sqlite3_column_name(stmt, j));
 			}
 			SOUT("\t</tr>");
+			SOUT("\t</thead>");
 		}
 
+		SOUT("\t<tbody>");
 		SOUT("\t<tr>");
 		for (j = 0; j < sqlite3_column_count(stmt); j++) {
 			t = (char *)sqlite3_column_text(stmt, j);
 			SOUT("\t\t<td>%s</td>", t);
 		}
 		SOUT("\t</tr>");
+		SOUT("\t</tbody>");
 	}
 
 	SOUT("</table>");
