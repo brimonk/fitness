@@ -5,8 +5,7 @@
 //
 // TODO (Brian)
 // 1. form (style)
-// 2. make list function + list endpoints
-// 3. unencode the percent encoded things
+// 2. unencode the percent encoded things
 //
 // We have to do something about parsing numbers and whatever else. We sure are just accepting
 // whateve the user passes to us right into functions like 'atoi', and that probably isn't very
